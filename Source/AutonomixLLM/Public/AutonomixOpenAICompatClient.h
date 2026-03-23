@@ -58,6 +58,17 @@ public:
 	/** Enable/disable streaming (default: enabled) */
 	void SetStreamingEnabled(bool bEnabled);
 
+	/**
+	 * Set the Azure OpenAI API version string (e.g. "2024-02-01").
+	 * When non-empty, switches to Azure wire format:
+	 *   - 'api-key' auth header instead of 'Authorization: Bearer'
+	 *   - ?api-version= query parameter appended to URL
+	 *   - Chat Completions API only (Responses API is NOT supported by Azure)
+	 *   - URL path: {base}/openai/deployments/{deployment}/chat/completions?api-version=...
+	 * Ported from Roo Code openai.ts AzureOpenAI client detection + _isAzureOpenAI().
+	 */
+	void SetAzureApiVersion(const FString& InApiVersion);
+
 	const FAutonomixTokenUsage& GetLastTokenUsage() const { return LastTokenUsage; }
 
 private:
@@ -131,6 +142,17 @@ private:
 	EAutonomixReasoningEffort ReasoningEffort;
 	bool bStreamingEnabled;
 	bool bUseResponsesAPI = false;  // Set per-request: true for OpenAI native (Responses API)
+
+	/** Azure API version string (e.g. "2024-02-01").
+	 *  When non-empty, Azure wire format is used: 'api-key' header, ?api-version= param,
+	 *  Chat Completions only (no Responses API). Empty = standard OpenAI wire format.
+	 *  Ported from Roo Code openai.ts azureOpenAiDefaultApiVersion usage. */
+	FString AzureApiVersion;
+
+	/** True if the current request is using Azure wire format.
+	 *  Set in SendMessage() based on Provider == Azure OR auto-detected Azure URL.
+	 *  When true: uses 'api-key' header, appends ?api-version=..., forces Chat Completions. */
+	bool bIsAzureRequest = false;
 
 	// Request state
 	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> CurrentRequest;

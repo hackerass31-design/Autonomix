@@ -105,9 +105,10 @@ public:
 	FString OpenAiModelId;
 
 	/** OpenAI base URL. Leave empty for official OpenAI API (https://api.openai.com/v1).
-	 *  Override for Azure OpenAI or compatible endpoints. */
+	 *  Do NOT use this for Azure — use the 'Azure OpenAI' provider instead. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "API|OpenAI",
-		meta = (DisplayName = "OpenAI Base URL (empty = official)"))
+		meta = (DisplayName = "OpenAI Base URL (empty = official)",
+		ToolTip = "Leave empty for official OpenAI. For Azure endpoints, switch to the 'Azure OpenAI' provider instead."))
 	FString OpenAiBaseUrl;
 
 	/** Reasoning effort for OpenAI reasoning models (o3, o4-mini, o1, GPT-5.x).
@@ -116,6 +117,48 @@ public:
 		meta = (DisplayName = "Reasoning Effort",
 		ToolTip = "For reasoning models (o3, o4-mini, o1, GPT-5.x). Auto-ignored for non-reasoning models (gpt-4o, gpt-4.1)."))
 	EAutonomixReasoningEffort OpenAiReasoningEffort;
+
+	// ============================================================================
+	// Azure OpenAI Service
+	//
+	// Azure uses a different auth model from the official OpenAI API:
+	//   - Auth header: 'api-key: {key}' (NOT 'Authorization: Bearer {key}')
+	//   - URL format:  https://{resource}.openai.azure.com/openai/deployments/{deployment}
+	//   - Query param: ?api-version=2024-02-01
+	//   - Uses Chat Completions API (/chat/completions), NOT the Responses API (/responses)
+	//   - Model ID = your Azure deployment name, not the base OpenAI model name
+	//
+	// Ported from Roo Code openai.ts — AzureOpenAI client detection via _isAzureOpenAI()
+	// ============================================================================
+
+	/** Azure OpenAI API key. Get this from Azure portal → your resource → Keys and Endpoint.
+	 *  Note: Azure uses 'api-key' header, NOT 'Authorization: Bearer'. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "API|Azure OpenAI",
+		meta = (DisplayName = "Azure API Key", PasswordField = true,
+		ToolTip = "Your Azure OpenAI resource key from Azure portal.\nGet it from: Azure portal → OpenAI resource → Resource Management → Keys and Endpoint"))
+	FString AzureApiKey;
+
+	/** Azure OpenAI deployment name. This is your deployment name, NOT the base model name.
+	 *  Example: if you deployed gpt-4o as 'my-gpt4-deployment', enter 'my-gpt4-deployment'. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "API|Azure OpenAI",
+		meta = (DisplayName = "Azure Deployment Name",
+		ToolTip = "Your Azure deployment name (NOT the base model name like 'gpt-4o').\nExample: 'my-gpt4-deployment', 'prod-gpt4o', etc.\nFind it in: Azure portal → OpenAI resource → Model deployments"))
+	FString AzureDeploymentName;
+
+	/** Azure OpenAI resource base URL.
+	 *  Format: https://{your-resource-name}.openai.azure.com
+	 *  Example: https://my-company-openai.openai.azure.com */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "API|Azure OpenAI",
+		meta = (DisplayName = "Azure Resource Base URL",
+		ToolTip = "Your Azure OpenAI resource endpoint.\nFormat: https://{resource-name}.openai.azure.com\nFind it in: Azure portal → OpenAI resource → Resource Management → Keys and Endpoint"))
+	FString AzureBaseUrl;
+
+	/** Azure OpenAI API version. Used as the ?api-version= query parameter.
+	 *  Recommended: 2024-02-01 for GA models, 2024-05-01-preview for preview features. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "API|Azure OpenAI",
+		meta = (DisplayName = "Azure API Version",
+		ToolTip = "The api-version query parameter for Azure OpenAI.\nRecommended: 2024-02-01 (stable) or 2024-05-01-preview (for preview features).\nSee: https://learn.microsoft.com/azure/ai-services/openai/reference"))
+	FString AzureApiVersion;
 
 	// ============================================================================
 	// Google Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.x, etc.)

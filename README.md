@@ -326,6 +326,7 @@ Regex-powered file content search with 2-line context before/after each match. F
 |----------|--------|-----------|-------------------|
 | **Anthropic** | Claude Opus 4.6, Claude Sonnet 4.6, Claude Sonnet 4.5, Claude Sonnet 4, etc. | ✅ SSE | ✅ budget_tokens |
 | **OpenAI** | GPT-5.4, GPT-5.3, GPT-4o, o3, o4-mini, etc. | ✅ SSE | ✅ reasoning_effort |
+| **Azure OpenAI** | Any model deployed to your Azure resource (gpt-4o, gpt-4.1, o3, etc.) | ✅ SSE | — |
 | **Google** | Gemini 3.x, Gemini 2.5 Pro/Flash | ✅ SSE | ✅ thinkingBudget |
 | **DeepSeek** | DeepSeek V3, DeepSeek R1 | ✅ SSE | ✅ reasoning_content |
 | **Mistral** | Mistral Large, Codestral, etc. | ✅ SSE | — |
@@ -336,6 +337,8 @@ Regex-powered file content search with 2-line context before/after each match. F
 | **Custom** | Any OpenAI-compatible endpoint | ✅ SSE | — |
 
 > **💡 Local Models:** Ollama and LM Studio run entirely on your machine — no API key, no cloud, no cost. Just install, pull a model, and connect. See [Local Model Setup](#local-model-setup-ollama--lm-studio) below.
+
+> **🔷 Azure OpenAI:** Azure uses a different authentication model from the official OpenAI API. See [Azure OpenAI Setup](#azure-openai-setup) below.
 
 ---
 
@@ -379,6 +382,35 @@ Regex-powered file content search with 2-line context before/after each match. F
 2. Load a model in the LM Studio UI
 3. Enable **Local Server** (starts on port 1234 by default)
 4. In Autonomix settings: set Provider to **LM Studio (Local)**, Base URL to `http://localhost:1234`, Model ID as shown in LM Studio
+
+### Azure OpenAI Setup
+
+Azure OpenAI is a **fundamentally different API** from the official OpenAI API. If you were getting `404 Custom API endpoint or model not found` errors while using the OpenAI provider with an Azure key, this is the fix.
+
+**Key differences from official OpenAI:**
+- Auth: `api-key: {key}` header (NOT `Authorization: Bearer {key}`)
+- URL: `https://{resource}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions?api-version=...`
+- API version is required as a query parameter
+- **Chat Completions API only** — Azure does NOT support the Responses API (`/v1/responses`)
+- Model ID = your **deployment name**, NOT the base model name (e.g. `my-gpt4-prod`, not `gpt-4o`)
+
+**Setup steps:**
+
+1. Go to [Azure portal](https://portal.azure.com) → your OpenAI resource → **Resource Management → Keys and Endpoint**
+2. Copy your **Key 1** or **Key 2** and the **Endpoint** (looks like `https://my-resource.openai.azure.com`)
+3. Go to **Azure AI Foundry** → **Deployments** → note your deployment name
+4. In Autonomix settings (Edit → Project Settings → Plugins → Autonomix → API | Azure OpenAI):
+   - **Provider**: `Azure OpenAI`
+   - **Azure API Key**: paste your key
+   - **Azure Resource Base URL**: `https://your-resource-name.openai.azure.com`
+   - **Azure Deployment Name**: your deployment name (e.g. `gpt4o-prod`)
+   - **Azure API Version**: `2024-02-01` (recommended) or `2024-05-01-preview` for preview features
+
+> **⚠️ Common mistakes:**
+> - Setting the deployment name to the base model name (`gpt-4o` instead of your actual deployment name)
+> - Using the **OpenAI provider** with an Azure URL — always use the **Azure OpenAI** provider
+> - Missing the API version — Azure rejects requests without `?api-version=...`
+> - Leaving the Base URL empty or using the full deployment URL instead of just the resource base URL
 
 ### Alternative: Manual Copy
 

@@ -25,6 +25,17 @@ UAutonomixDeveloperSettings::UAutonomixDeveloperSettings()
 	OpenAiBaseUrl = TEXT("");  // empty = official https://api.openai.com/v1
 	OpenAiReasoningEffort = EAutonomixReasoningEffort::Medium;
 
+	// --- Azure OpenAI defaults (ported from Roo Code azureOpenAiDefaultApiVersion) ---
+	// Azure auth/URL model is fundamentally different from official OpenAI:
+	// - Header: 'api-key: {key}' NOT 'Authorization: Bearer {key}'
+	// - URL: https://{resource}.openai.azure.com/openai/deployments/{deployment}/chat/completions
+	// - Query: ?api-version=2024-02-01
+	// - Uses Chat Completions only (no Responses API)
+	AzureApiKey = TEXT("");
+	AzureDeploymentName = TEXT("");  // User must set this to their deployment name
+	AzureBaseUrl = TEXT("");         // User must set: https://{resource}.openai.azure.com
+	AzureApiVersion = TEXT("2024-02-01");  // Stable GA version (matches Roo Code azureOpenAiDefaultApiVersion)
+
 	// --- Google Gemini defaults (from Roo Code geminiDefaultModelId) ---
 	GeminiModelId = TEXT("gemini-3.1-pro-preview");
 	GeminiBaseUrl = TEXT("");  // empty = official generativelanguage.googleapis.com
@@ -133,7 +144,16 @@ FString UAutonomixDeveloperSettings::GetEffectiveEndpoint() const
 	case EAutonomixProvider::Anthropic:
 		return ApiEndpoint.IsEmpty() ? DefaultApiEndpoint : ApiEndpoint;
 	case EAutonomixProvider::OpenAI:
+		// Official OpenAI API only — for Azure, use the Azure provider.
+		// If user accidentally put an Azure URL here, OpenAICompatClient will
+		// auto-detect it via _isAzureUrl() and apply Azure wire format anyway.
 		return OpenAiBaseUrl.IsEmpty() ? TEXT("https://api.openai.com/v1") : OpenAiBaseUrl;
+	case EAutonomixProvider::Azure:
+		// Azure base URL: https://{resource}.openai.azure.com
+		// The OpenAICompatClient will append the deployment path + api-version.
+		// If the user left BaseUrl empty, return empty so the client can validate
+		// and give a clear error instead of sending a request to nowhere.
+		return AzureBaseUrl;
 	case EAutonomixProvider::Google:
 		return GeminiBaseUrl.IsEmpty() ? TEXT("https://generativelanguage.googleapis.com") : GeminiBaseUrl;
 	case EAutonomixProvider::DeepSeek:
@@ -164,6 +184,7 @@ FString UAutonomixDeveloperSettings::GetActiveApiKey() const
 	{
 	case EAutonomixProvider::Anthropic:  return ApiKey;
 	case EAutonomixProvider::OpenAI:     return OpenAiApiKey;
+	case EAutonomixProvider::Azure:      return AzureApiKey;   // 'api-key' header, not 'Authorization: Bearer'
 	case EAutonomixProvider::Google:     return GeminiApiKey;
 	case EAutonomixProvider::DeepSeek:   return DeepSeekApiKey;
 	case EAutonomixProvider::Mistral:    return MistralApiKey;
@@ -188,6 +209,10 @@ FString UAutonomixDeveloperSettings::GetEffectiveModel() const
 	}
 	case EAutonomixProvider::OpenAI:
 		return OpenAiModelId.IsEmpty() ? TEXT("gpt-5.1-codex-max") : OpenAiModelId;
+	case EAutonomixProvider::Azure:
+		// For Azure, the "model" is the deployment name, NOT the base model ID.
+		// Returning the deployment name is what the API expects in the URL and body.
+		return AzureDeploymentName;
 	case EAutonomixProvider::Google:
 		return GeminiModelId.IsEmpty() ? TEXT("gemini-3.1-pro-preview") : GeminiModelId;
 	case EAutonomixProvider::DeepSeek:
@@ -215,6 +240,9 @@ bool UAutonomixDeveloperSettings::IsActiveProviderApiKeySet() const
 	// Local providers don't need an API key
 	if (ActiveProvider == EAutonomixProvider::Ollama || ActiveProvider == EAutonomixProvider::LMStudio)
 		return true;
+	// Azure: also requires AzureBaseUrl and AzureDeploymentName to be usable
+	if (ActiveProvider == EAutonomixProvider::Azure)
+		return !Key.IsEmpty() && Key.Len() > 10 && !AzureBaseUrl.IsEmpty() && !AzureDeploymentName.IsEmpty();
 	return !Key.IsEmpty() && Key.Len() > 10;
 }
 
@@ -239,6 +267,11 @@ FString UAutonomixDeveloperSettings::GetModelDisplayName() const
 	}
 	case EAutonomixProvider::OpenAI:
 		return FString::Printf(TEXT("OpenAI: %s"), *ModelId);
+	case EAutonomixProvider::Azure:
+		// Show deployment name with Azure label so users know they're in Azure mode
+		return ModelId.IsEmpty()
+			? TEXT("Azure OpenAI (no deployment set)")
+			: FString::Printf(TEXT("Azure: %s"), *ModelId);
 	case EAutonomixProvider::Google:
 		return FString::Printf(TEXT("Gemini: %s"), *ModelId);
 	case EAutonomixProvider::DeepSeek:

@@ -79,6 +79,21 @@ TSharedPtr<IAutonomixLLMClient> FAutonomixLLMClientFactory::CreateClientForProvi
 	case EAutonomixProvider::OpenAI:
 		Client->SetReasoningEffort(Settings->OpenAiReasoningEffort);
 		break;
+
+	case EAutonomixProvider::Azure:
+		// Azure OpenAI Service wire format (ported from Roo Code openai.ts AzureOpenAI client):
+		//   - Auth:  'api-key' header (NOT 'Authorization: Bearer')
+		//   - URL:   https://{resource}.openai.azure.com/openai/deployments/{deployment}/chat/completions?api-version=...
+		//   - API:   Chat Completions only (Responses API NOT supported by Azure)
+		// The client auto-activates Azure wire format when AzureApiVersion is set OR
+		// when the BaseUrl contains ".azure.com" (see IsAzureUrl() in the client).
+		Client->SetAzureApiVersion(Settings->AzureApiVersion.IsEmpty() ? TEXT("2024-02-01") : Settings->AzureApiVersion);
+		Client->SetReasoningEffort(EAutonomixReasoningEffort::Disabled);  // Azure does not support reasoning_effort
+		UE_LOG(LogAutonomix, Log, TEXT("LLMClientFactory: Azure OpenAI — resource=%s deployment=%s api-version=%s"),
+			*Settings->AzureBaseUrl, *Settings->AzureDeploymentName,
+			*(Settings->AzureApiVersion.IsEmpty() ? TEXT("2024-02-01") : Settings->AzureApiVersion));
+		break;
+
 	case EAutonomixProvider::DeepSeek:
 	{
 		// deepseek-reasoner supports reasoning effort mapping
@@ -113,6 +128,11 @@ FString FAutonomixLLMClientFactory::GetActiveProviderDisplayName()
 		return FString::Printf(TEXT("Claude | %s"), *ModelId);
 	case EAutonomixProvider::OpenAI:
 		return FString::Printf(TEXT("OpenAI | %s"), *ModelId);
+	case EAutonomixProvider::Azure:
+		// Show deployment name — it's the "model" from Azure's perspective
+		return ModelId.IsEmpty()
+			? TEXT("Azure OpenAI | (no deployment)")
+			: FString::Printf(TEXT("Azure OpenAI | %s"), *ModelId);
 	case EAutonomixProvider::Google:
 		return FString::Printf(TEXT("Gemini | %s"), *ModelId);
 	case EAutonomixProvider::DeepSeek:

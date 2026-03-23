@@ -57,6 +57,7 @@ static FString GetProviderDisplayName(EAutonomixProvider Provider)
 	switch (Provider)
 	{
 	case EAutonomixProvider::OpenAI:     return TEXT("OpenAI");
+	case EAutonomixProvider::Azure:      return TEXT("Azure OpenAI");
 	case EAutonomixProvider::DeepSeek:   return TEXT("DeepSeek");
 	case EAutonomixProvider::Mistral:    return TEXT("Mistral");
 	case EAutonomixProvider::xAI:        return TEXT("xAI");
@@ -66,6 +67,22 @@ static FString GetProviderDisplayName(EAutonomixProvider Provider)
 	case EAutonomixProvider::Custom:     return TEXT("Custom API");
 	default:                             return TEXT("API");
 	}
+}
+
+/**
+ * Detect if a URL is an Azure OpenAI endpoint.
+ * Ported from Roo Code openai.ts _isAzureOpenAI() — checks if the host ends with .azure.com.
+ * This also catches the case where a user set OpenAI provider but supplied an Azure URL,
+ * allowing seamless fallback to Azure wire format regardless of provider selection.
+ */
+static bool IsAzureUrl(const FString& Url)
+{
+	if (Url.IsEmpty()) return false;
+	// Parse just the host from the URL. Azure resource URLs look like:
+	// https://my-resource.openai.azure.com
+	// https://my-resource.openai.azure.com/openai/deployments/...
+	FString Lower = Url.ToLower();
+	return Lower.Contains(TEXT(".azure.com")) || Lower.Contains(TEXT(".openai.azure.com"));
 }
 
 FAutonomixOpenAICompatClient::FAutonomixOpenAICompatClient()
@@ -94,6 +111,7 @@ void FAutonomixOpenAICompatClient::SetProvider(EAutonomixProvider InProvider) { 
 void FAutonomixOpenAICompatClient::SetMaxTokens(int32 InMaxTokens) { MaxTokens = InMaxTokens; }
 void FAutonomixOpenAICompatClient::SetReasoningEffort(EAutonomixReasoningEffort InEffort) { ReasoningEffort = InEffort; }
 void FAutonomixOpenAICompatClient::SetStreamingEnabled(bool bEnabled) { bStreamingEnabled = bEnabled; }
+void FAutonomixOpenAICompatClient::SetAzureApiVersion(const FString& InApiVersion) { AzureApiVersion = InApiVersion; }
 
 FString FAutonomixOpenAICompatClient::ReasoningEffortToString(EAutonomixReasoningEffort Effort)
 {
@@ -117,7 +135,51 @@ void FAutonomixOpenAICompatClient::SendMessage(
 		return;
 	}
 
-	if (ApiKey.IsEmpty() && Provider != EAutonomixProvider::Ollama && Provider != EAutonomixProvider::LMStudio)
+	// ---- Azure pre-flight validation ----
+	// Azure requires base URL + deployment name + api-version; give a clear error early.
+	const bool bIsAzureProvider = (Provider == EAutonomixProvider::Azure);
+	const bool bIsAzureUrl      = IsAzureUrl(BaseUrl);  // auto-detect even with OpenAI provider
+	bIsAzureRequest              = bIsAzureProvider || bIsAzureUrl;
+
+	if (bIsAzureRequest)
+	{
+		if (BaseUrl.IsEmpty())
+		{
+			FAutonomixHTTPError Err;
+			Err.Type = EAutonomixHTTPErrorType::InvalidResponse;
+			Err.UserFriendlyMessage = TEXT("Azure OpenAI: Base URL is empty.\n\n")
+				TEXT("Set it to: https://{your-resource-name}.openai.azure.com\n")
+				TEXT("Edit in: Project Settings \u2192 Plugins \u2192 Autonomix \u2192 API | Azure OpenAI");
+			ErrorReceivedDelegate.Broadcast(Err);
+			RequestCompletedDelegate.Broadcast(false);
+			return;
+		}
+		if (ModelId.IsEmpty())
+		{
+			FAutonomixHTTPError Err;
+			Err.Type = EAutonomixHTTPErrorType::InvalidResponse;
+			Err.UserFriendlyMessage = TEXT("Azure OpenAI: Deployment Name is empty.\n\n")
+				TEXT("Set it to your Azure deployment name (NOT the base model name like 'gpt-4o').\n")
+				TEXT("Example: 'my-gpt4-deployment', 'prod-gpt4o'\n")
+				TEXT("Edit in: Project Settings \u2192 Plugins \u2192 Autonomix \u2192 API | Azure OpenAI");
+			ErrorReceivedDelegate.Broadcast(Err);
+			RequestCompletedDelegate.Broadcast(false);
+			return;
+		}
+		if (ApiKey.IsEmpty())
+		{
+			UE_LOG(LogAutonomix, Error, TEXT("OpenAICompatClient: Azure API key not set."));
+			FAutonomixHTTPError Err;
+			Err.Type = EAutonomixHTTPErrorType::Unauthorized;
+			Err.UserFriendlyMessage = TEXT("Azure OpenAI: API Key is empty.\n\n")
+				TEXT("Enter your Azure API key (from Azure portal \u2192 OpenAI resource \u2192 Keys and Endpoint).\n")
+				TEXT("Edit in: Project Settings \u2192 Plugins \u2192 Autonomix \u2192 API | Azure OpenAI");
+			ErrorReceivedDelegate.Broadcast(Err);
+			RequestCompletedDelegate.Broadcast(false);
+			return;
+		}
+	}
+	else if (ApiKey.IsEmpty() && Provider != EAutonomixProvider::Ollama && Provider != EAutonomixProvider::LMStudio)
 	{
 		UE_LOG(LogAutonomix, Error, TEXT("OpenAICompatClient: API key not set for provider %d."), (int32)Provider);
 		ErrorReceivedDelegate.Broadcast(FAutonomixHTTPError::ConnectionFailed(GetProviderDisplayName(Provider)));
@@ -130,33 +192,80 @@ void FAutonomixOpenAICompatClient::SendMessage(
 	RetrySystemPrompt = SystemPrompt;
 	RetryToolSchemas = ToolSchemas;
 
-	// Detect whether to use Responses API or Chat Completions
-	// GPT-5.x and newer OpenAI models REQUIRE the Responses API (/v1/responses).
-	// Other providers (DeepSeek, Mistral, xAI, Ollama, etc.) use Chat Completions.
-	bUseResponsesAPI = (Provider == EAutonomixProvider::OpenAI);
+	// ---- API type selection ----
+	// Responses API (/v1/responses): official OpenAI only (GPT-5.x, GPT-4.1, o-series).
+	// Azure OpenAI does NOT support the Responses API — always use Chat Completions.
+	// Ported from Roo Code openai.ts: Azure goes through AzureOpenAI client which uses
+	// the Chat Completions path regardless of model.
+	bUseResponsesAPI = (Provider == EAutonomixProvider::OpenAI) && !bIsAzureRequest;
 
 	TSharedPtr<FJsonObject> Body = BuildRequestBody(ConversationHistory, SystemPrompt, ToolSchemas);
 	FString BodyString;
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&BodyString);
 	FJsonSerializer::Serialize(Body.ToSharedRef(), Writer);
 
-	// Build URL based on API type
-	FString Url = BaseUrl;
-	if (!Url.EndsWith(TEXT("/"))) Url += TEXT("/");
-	if (bUseResponsesAPI)
+	// ---- URL construction ----
+	FString Url;
+	if (bIsAzureRequest)
 	{
-		Url += TEXT("responses");
+		// Azure URL format (ported from Roo Code AzureOpenAI client):
+		//   https://{resource}.openai.azure.com/openai/deployments/{deployment-name}/chat/completions?api-version={version}
+		// The base URL may or may not include trailing slash or /openai path.
+		FString AzureBase = BaseUrl;
+		// Strip trailing slash for clean concatenation
+		while (AzureBase.EndsWith(TEXT("/"))) AzureBase.RemoveAt(AzureBase.Len() - 1);
+		// Strip any existing /openai/deployments path the user may have included
+		// (we build the full path ourselves to ensure correctness)
+		{
+			int32 DeployIdx = INDEX_NONE;
+			AzureBase.FindLastChar(TEXT('/'), DeployIdx);
+			// Only strip if the user appended /openai... path
+			FString Lower = AzureBase.ToLower();
+			int32 OpenAIIdx = Lower.Find(TEXT("/openai"), ESearchCase::IgnoreCase, ESearchDir::FromStart);
+			if (OpenAIIdx != INDEX_NONE)
+			{
+				AzureBase = AzureBase.Left(OpenAIIdx);
+			}
+		}
+
+		// Build full Azure deployment URL
+		Url = FString::Printf(TEXT("%s/openai/deployments/%s/chat/completions"), *AzureBase, *ModelId);
+
+		// Append api-version query parameter (required by Azure)
+		FString ApiVersion = AzureApiVersion.IsEmpty() ? TEXT("2024-02-01") : AzureApiVersion;
+		Url += FString::Printf(TEXT("?api-version=%s"), *ApiVersion);
+
+		UE_LOG(LogAutonomix, Log, TEXT("OpenAICompatClient: Azure request URL: %s"), *Url);
 	}
 	else
 	{
-		Url += TEXT("chat/completions");
+		Url = BaseUrl;
+		if (!Url.EndsWith(TEXT("/"))) Url += TEXT("/");
+		if (bUseResponsesAPI)
+		{
+			Url += TEXT("responses");
+		}
+		else
+		{
+			Url += TEXT("chat/completions");
+		}
 	}
 
 	CurrentRequest = FHttpModule::Get().CreateRequest();
 	CurrentRequest->SetURL(Url);
 	CurrentRequest->SetVerb(TEXT("POST"));
 	CurrentRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	if (!ApiKey.IsEmpty())
+
+	if (bIsAzureRequest)
+	{
+		// Azure uses 'api-key' header, NOT 'Authorization: Bearer'.
+		// This is the primary difference from the official OpenAI API.
+		// Ported from Roo Code openai.ts AzureOpenAI client which passes apiKey directly
+		// (the AzureOpenAI SDK sets 'api-key' internally).
+		CurrentRequest->SetHeader(TEXT("api-key"), ApiKey);
+		UE_LOG(LogAutonomix, Log, TEXT("OpenAICompatClient: Using Azure auth (api-key header)."));
+	}
+	else if (!ApiKey.IsEmpty())
 	{
 		CurrentRequest->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *ApiKey));
 	}

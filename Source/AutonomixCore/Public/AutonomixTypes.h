@@ -144,8 +144,23 @@ enum class EAutonomixProvider : uint8
 	/** Anthropic Claude (claude-sonnet-4-6, claude-opus-4-6, claude-3-5-sonnet, etc.) */
 	Anthropic		UMETA(DisplayName = "Anthropic (Claude)"),
 
-	/** OpenAI GPT / o-series (gpt-4o, gpt-4.1, o3, o4-mini, etc.) */
+	/** OpenAI GPT / o-series (gpt-4o, gpt-4.1, o3, o4-mini, etc.) — official OpenAI API only */
 	OpenAI			UMETA(DisplayName = "OpenAI (GPT / o-series)"),
+
+	/**
+	 * Microsoft Azure OpenAI Service.
+	 *
+	 * Azure uses a different auth model and URL structure than the official OpenAI API:
+	 *   - Auth: 'api-key: {key}' header (NOT 'Authorization: Bearer {key}')
+	 *   - URL:  https://{resource}.openai.azure.com/openai/deployments/{deployment-name}
+	 *   - API version query param: ?api-version=2024-02-01
+	 *   - Chat Completions API only (does NOT support the Responses API /v1/responses)
+	 *   - Model ID = your deployment name (not the base OpenAI model name)
+	 *
+	 * Also auto-detected: if you use the OpenAI provider with an Azure base URL
+	 * (*.openai.azure.com), Autonomix automatically switches to Azure wire format.
+	 */
+	Azure			UMETA(DisplayName = "Azure OpenAI"),
 
 	/** Google Gemini (gemini-2.5-pro, gemini-2.5-flash, gemini-3.x, etc.) */
 	Google			UMETA(DisplayName = "Google (Gemini)"),
@@ -785,8 +800,27 @@ struct AUTONOMIXCORE_API FAutonomixHTTPError
 		else if (Code == 404)
 		{
 			Err.Type = EAutonomixHTTPErrorType::InvalidResponse;
-			Err.UserFriendlyMessage = FString::Printf(
-				TEXT("%s endpoint or model not found (HTTP 404). Check your model ID and base URL in settings."), *ProviderName);
+			// Provide Azure-specific guidance if the provider name contains "Azure" or "OpenAI",
+			// since Azure is the most common source of 404s — wrong deployment name, missing
+			// api-version, or using the standard OpenAI provider instead of the Azure provider.
+			// Ported guidance pattern from Roo Code openai.ts _isAzureOpenAI() detection.
+			if (ProviderName.Contains(TEXT("Azure")) || ProviderName.Contains(TEXT("OpenAI")))
+			{
+				Err.UserFriendlyMessage = FString::Printf(
+					TEXT("%s endpoint or model not found (HTTP 404).\n\n")
+					TEXT("Common causes:\n")
+					TEXT("  \u2022 Wrong model/deployment name — Azure uses your deployment name (e.g. \"my-gpt4\"), not the base model ID (e.g. \"gpt-4o\").\n")
+					TEXT("  \u2022 Using OpenAI provider with an Azure URL — switch Provider to 'Azure OpenAI' in settings.\n")
+					TEXT("  \u2022 Missing or wrong api-version — set Azure API Version (e.g. 2024-02-01).\n")
+					TEXT("  \u2022 Wrong base URL format — Azure URL should be: https://{resource}.openai.azure.com\n\n")
+					TEXT("Check your settings in Project Settings \u2192 Plugins \u2192 Autonomix \u2192 API | Azure OpenAI."),
+					*ProviderName);
+			}
+			else
+			{
+				Err.UserFriendlyMessage = FString::Printf(
+					TEXT("%s endpoint or model not found (HTTP 404). Check your model ID and base URL in settings."), *ProviderName);
+			}
 		}
 		else if (Code >= 500)
 		{

